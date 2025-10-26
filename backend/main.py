@@ -6,7 +6,20 @@ from functools import lru_cache
 from typing import Tuple
 
 import functions_framework
-from fastapi import FastAPI, HTTPException
+try:
+    from fastapi import FastAPI, HTTPException
+except ImportError as exc:  # pragma: no cover - FastAPI should be installed for local runs
+    FastAPI = None  # type: ignore[assignment]
+
+    class HTTPException(Exception):  # type: ignore[assignment]
+        def __init__(self, status_code: int, detail: str):
+            self.status_code = status_code
+            self.detail = detail
+            super().__init__(f"{status_code}: {detail}")
+
+    _fastapi_import_error = exc
+else:
+    _fastapi_import_error = None
 from google.cloud import documentai_v1 as documentai
 from google.cloud import firestore, storage
 from pydantic import BaseModel
@@ -15,6 +28,18 @@ from urllib.parse import urlparse
 from vertexai.generative_models import GenerativeModel
 
 __all__ = ["app", "process_deal_pdf", "generate_analysis"]
+
+
+# Placeholder so attribute access succeeds even if FastAPI failed to import.
+# Uvicorn raises a clearer runtime error instead of "Attribute 'app' not found".
+class _MissingFastAPIApp:
+    async def __call__(self, scope, receive, send):  # pragma: no cover - defensive fallback
+        raise RuntimeError(
+            "FastAPI is required to run the local development server. "
+            "Install it with `pip install fastapi uvicorn`.") from _fastapi_import_error
+
+
+app = _MissingFastAPIApp() if FastAPI is None else FastAPI(title="Pitch Lens Backend")
 
 
 # --- Configuration ---
@@ -231,26 +256,29 @@ class QueueRequest(BaseModel):
     dealId: str
 
 
-app = FastAPI(title="Pitch Lens Backend")
+def _queue_analysis_handler(payload: QueueRequest) -> dict:
+    doc_ref = _get_firestore_client().collection("deals").document(payload.dealId)
+    if not doc_ref.get().exists:
+        raise HTTPException(status_code=404, detail="Deal not found")
+
+    doc_ref.update({"status": "queued"})
+    return {"dealId": payload.dealId, "status": "queued"}
 
 
-@app.get("/healthz")
-def health_check() -> dict:
-    return {"status": "ok"}
+if FastAPI is not None:
+
+    @app.get("/healthz")
+    def health_check() -> dict:
+        return {"status": "ok"}
 
 
-@app.post("/queueAnalysis")
-def queue_analysis(payload: QueueRequest) -> dict:
-    """Minimal local shim for the HTTPS function."""
-    try:
-        doc_ref = _get_firestore_client().collection("deals").document(payload.dealId)
-        if not doc_ref.get().exists:
-            raise HTTPException(status_code=404, detail="Deal not found")
-
-        doc_ref.update({"status": "queued"})
-        return {"dealId": payload.dealId, "status": "queued"}
-    except HTTPException:
-        raise
-    except Exception as exc:  # pylint: disable=broad-except
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    @app.post("/queueAnalysis")
+    def queue_analysis(payload: QueueRequest) -> dict:
+        """Minimal local shim for the HTTPS function."""
+        try:
+            return _queue_analysis_handler(payload)
+        except HTTPException:
+            raise
+        except Exception as exc:  # pylint: disable=broad-except
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
