@@ -259,6 +259,14 @@ def _queue_analysis_handler(payload: QueueRequest) -> dict:
 if FastAPI is not None:
     app = FastAPI(title="Pitch Lens Backend")
 
+    @app.get("/")
+    def index() -> dict:
+        """Provide a friendly landing response for local testing."""
+        return {
+            "message": "Pitch Lens backend is running.",
+            "endpoints": ["/healthz", "/queueAnalysis"],
+        }
+
     @app.get("/healthz")
     def health_check() -> dict:
         return {"status": "ok"}
@@ -287,6 +295,18 @@ else:
 
             path = scope.get("path", "")
             method = scope.get("method", "GET").upper()
+
+            if path == "/" and method == "GET":
+                status, body, headers = _json_response(
+                    200,
+                    {
+                        "message": "Pitch Lens backend is running.",
+                        "endpoints": ["/healthz", "/queueAnalysis"],
+                    },
+                )
+                await send({"type": "http.response.start", "status": status, "headers": headers})
+                await send({"type": "http.response.body", "body": body})
+                return
 
             if path == "/healthz" and method == "GET":
                 status, body, headers = _json_response(200, {"status": "ok"})
