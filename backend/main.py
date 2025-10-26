@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import io
+import json
 from functools import lru_cache
 from typing import Tuple
 
 import functions_framework
 try:
     from fastapi import FastAPI, HTTPException
-except ImportError as exc:  # pragma: no cover - FastAPI should be installed for local runs
+except ImportError:  # pragma: no cover - FastAPI is optional for local runs
     FastAPI = None  # type: ignore[assignment]
 
     class HTTPException(Exception):  # type: ignore[assignment]
@@ -16,13 +17,9 @@ except ImportError as exc:  # pragma: no cover - FastAPI should be installed for
             self.status_code = status_code
             self.detail = detail
             super().__init__(f"{status_code}: {detail}")
-
-    _fastapi_import_error = exc
-else:
-    _fastapi_import_error = None
 from google.cloud import documentai_v1 as documentai
 from google.cloud import firestore, storage
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pypdf import PdfReader, PdfWriter
 from urllib.parse import urlparse
 from vertexai.generative_models import GenerativeModel
@@ -30,16 +27,10 @@ from vertexai.generative_models import GenerativeModel
 __all__ = ["app", "process_deal_pdf", "generate_analysis"]
 
 
-# Placeholder so attribute access succeeds even if FastAPI failed to import.
-# Uvicorn raises a clearer runtime error instead of "Attribute 'app' not found".
-class _MissingFastAPIApp:
-    async def __call__(self, scope, receive, send):  # pragma: no cover - defensive fallback
-        raise RuntimeError(
-            "FastAPI is required to run the local development server. "
-            "Install it with `pip install fastapi uvicorn`.") from _fastapi_import_error
-
-
-app = _MissingFastAPIApp() if FastAPI is None else FastAPI(title="Pitch Lens Backend")
+def _json_response(status: int, payload: dict) -> Tuple[int, bytes, list[tuple[bytes, bytes]]]:
+    body = json.dumps(payload).encode("utf-8")
+    headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
+    return status, body, headers
 
 
 # --- Configuration ---
@@ -266,6 +257,7 @@ def _queue_analysis_handler(payload: QueueRequest) -> dict:
 
 
 if FastAPI is not None:
+    app = FastAPI(title="Pitch Lens Backend")
 
     @app.get("/healthz")
     def health_check() -> dict:
@@ -281,4 +273,54 @@ if FastAPI is not None:
             raise
         except Exception as exc:  # pylint: disable=broad-except
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+else:
+
+    class _FallbackASGIApp:
+        """Minimal ASGI app so uvicorn works even when FastAPI isn't installed."""
+
+        async def __call__(self, scope, receive, send):  # pragma: no cover - exercised manually
+            if scope["type"] != "http":
+                status, body, headers = _json_response(500, {"detail": "Unsupported scope"})
+                await send({"type": "http.response.start", "status": status, "headers": headers})
+                await send({"type": "http.response.body", "body": body})
+                return
+
+            path = scope.get("path", "")
+            method = scope.get("method", "GET").upper()
+
+            if path == "/healthz" and method == "GET":
+                status, body, headers = _json_response(200, {"status": "ok"})
+                await send({"type": "http.response.start", "status": status, "headers": headers})
+                await send({"type": "http.response.body", "body": body})
+                return
+
+            if path == "/queueAnalysis" and method == "POST":
+                raw_body = b""
+                more_body = True
+                while more_body:
+                    message = await receive()
+                    raw_body += message.get("body", b"")
+                    more_body = message.get("more_body", False)
+
+                try:
+                    payload = QueueRequest.parse_raw(raw_body or b"{}")
+                    result = _queue_analysis_handler(payload)
+                    status, body, headers = _json_response(200, result)
+                except (ValueError, ValidationError) as exc:
+                    status, body, headers = _json_response(400, {"detail": str(exc)})
+                except HTTPException as exc:  # type: ignore[arg-type]
+                    status, body, headers = _json_response(exc.status_code, {"detail": exc.detail})
+                except Exception as exc:  # pylint: disable=broad-except
+                    status, body, headers = _json_response(500, {"detail": str(exc)})
+
+                await send({"type": "http.response.start", "status": status, "headers": headers})
+                await send({"type": "http.response.body", "body": body})
+                return
+
+            status, body, headers = _json_response(404, {"detail": "Not Found"})
+            await send({"type": "http.response.start", "status": status, "headers": headers})
+            await send({"type": "http.response.body", "body": body})
+
+
+    app = _FallbackASGIApp()
 
