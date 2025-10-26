@@ -6,28 +6,38 @@ serverTimestamp, where, getDocs, limit, updateDoc,
 import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
 import { DealData } from "@/types/deal";
 
+export type { DealData } from "@/types/deal";
+
 /** Upload PDF with progress, return storage path + URL */
 export function uploadPdfToStorage(
 file: File,
 onProgress?: (pct: number) => void
-): Promise<{ storagePath: string; downloadURL: string }> {
+): Promise<{ storagePath: string; gcsPath: string; downloadURL: string }> {
 return new Promise((resolve, reject) => {
 const uid = auth.currentUser?.uid ?? "anon";
-const storagePath = `decks/${uid}/${Date.now()}_${file.name}`;
+const storagePath = `deals/${uid}/${Date.now()}_${file.name}`;
 const storageRef = ref(storage, storagePath);
 const task = uploadBytesResumable(storageRef, file, { contentType: file.type || "application/pdf" });
 
 task.on("state_changed",
 (snap) => onProgress?.(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
 (err) => reject(err),
-async () => resolve({ storagePath, downloadURL: await getDownloadURL(task.snapshot.ref) })
+async () => {
+const bucket = storage.app.options?.storageBucket;
+const gcsPath = bucket ? `gs://${bucket}/${storagePath}` : storagePath;
+const downloadURL = await getDownloadURL(task.snapshot.ref);
+resolve({ storagePath, gcsPath, downloadURL });
+}
 );
 });
 }
 
 /** Create Firestore deal doc and return its id */
 export async function createDealDoc(params: {
-filename: string; storagePath: string; fileUrl: string;
+filename: string;
+storagePath: string;
+gcsPath: string;
+fileUrl: string;
 }): Promise<string> {
 const user = auth.currentUser;
 if (!user) throw new Error("Not authenticated");
@@ -35,6 +45,7 @@ const ref = await addDoc(collection(db, "deals"), {
 userId: user.uid,
 filename: params.filename,
 storagePath: params.storagePath,
+gcsPath: params.gcsPath,
 fileUrl: params.fileUrl,
 status: "uploaded",
 createdAt: serverTimestamp(),
@@ -44,11 +55,34 @@ return ref.id;
 }
 
 /** Watch a deal live */
-export function watchDeal(dealId: string, cb: (deal: DealData | null) => void) {
-return onSnapshot(doc(db, "deals", dealId), (snap) => {
+export function watchDeal(
+dealId: string,
+cb: (deal: DealData | null) => void,
+onError?: (error: unknown) => void
+) {
+return onSnapshot(
+doc(db, "deals", dealId),
+{
+next: (snap) => {
 if (!snap.exists()) { cb(null); return; }
-cb({ id: snap.id, ...(snap.data() as DealData) });
+const data = snap.data();
+cb({
+id: snap.id,
+userId: data.userId,
+filename: data.filename,
+storagePath: data.storagePath,
+gcsPath: data.gcsPath,
+fileUrl: data.fileUrl,
+status: data.status,
+createdAt: data.createdAt,
+updatedAt: data.updatedAt,
+analysis: data.analysis,
+errorMessage: data.errorMessage ?? data.error_message,
 });
+},
+error: (err) => onError?.(err),
+}
+);
 }
 
 /** Recent deals for current user */
@@ -62,7 +96,22 @@ orderBy("createdAt", "desc"),
 limit(limitCount)
 );
 const snap = await getDocs(q);
-return snap.docs.map(d => ({ id: d.id, ...(d.data() as DealData) }));
+return snap.docs.map((d) => {
+const data = d.data();
+return {
+id: d.id,
+userId: data.userId,
+filename: data.filename,
+storagePath: data.storagePath,
+gcsPath: data.gcsPath,
+fileUrl: data.fileUrl,
+status: data.status,
+createdAt: data.createdAt,
+updatedAt: data.updatedAt,
+analysis: data.analysis,
+errorMessage: data.errorMessage ?? data.error_message,
+};
+});
 }
 
 /** Mark queued (optional) */

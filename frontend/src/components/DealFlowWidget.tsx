@@ -25,10 +25,10 @@ const DealFlowWidget: React.FC = () => {
       if (!file) return;
 
       // 1) Upload to Storage -> get gs:// path
-      const { dealId: id, gcsPath } = await uploadPdfToStorage(file);
+      const { storagePath, gcsPath, downloadURL } = await uploadPdfToStorage(file);
 
       // 2) Create Firestore doc -> triggers Cloud Functions
-      await createDealDoc(id, gcsPath);
+      const id = await createDealDoc({ filename: file.name, storagePath, gcsPath, fileUrl: downloadURL });
 
       setDealId(id);
     } catch (e: any) {
@@ -59,28 +59,28 @@ const DealFlowWidget: React.FC = () => {
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {dealId && (
-        <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-sm">
-          <div><span className="font-semibold">Deal ID:</span> {dealId}</div>
-          <div><span className="font-semibold">Status:</span> {deal?.status || 'waiting...'}</div>
+        {dealId && (
+          <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-sm">
+            <div><span className="font-semibold">Deal ID:</span> {dealId}</div>
+            <div><span className="font-semibold">Status:</span> {deal?.status || 'waiting...'}</div>
 
-          {deal?.status === 'error' && (
-            <div className="text-red-700 mt-2">
-              <span className="font-semibold">Error:</span> {deal?.error_message || 'Unknown error'}
-            </div>
-          )}
-
-          {deal?.status === 'completed' && deal?.analysis && (
-            <div className="mt-3 space-y-1">
-              <div className="font-semibold">Analysis Ready ✅</div>
-              <div className="text-slate-700">
-                <div><span className="font-semibold">Risk:</span> {deal.analysis.risk || 'N/A'}</div>
-                <div><span className="font-semibold">Financials:</span> {deal.analysis.financials || 'N/A'}</div>
+            {deal?.status === 'error' && (
+              <div className="text-red-700 mt-2">
+                <span className="font-semibold">Error:</span> {deal?.errorMessage || 'Unknown error'}
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+
+            {deal?.status === 'completed' && deal?.analysis && (
+              <div className="mt-3 space-y-1">
+                <div className="font-semibold">Analysis Ready ✅</div>
+                <div className="text-slate-700">
+                  <div><span className="font-semibold">Risk:</span> {deal.analysis.risk || 'N/A'}</div>
+                  <div><span className="font-semibold">Financials:</span> {deal.analysis.financials || 'N/A'}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
     </div>
   );
 };
