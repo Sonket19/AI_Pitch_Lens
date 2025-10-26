@@ -19,15 +19,15 @@ if (!file) return;
 setError(null); setDeal(null); setFileName(file.name); setProgress(0); setLoading(true);
 
 try {
-const { storagePath, downloadURL } = await uploadPdfToStorage(file, setProgress);
-const dealId = await createDealDoc({ filename: file.name, storagePath, fileUrl: downloadURL });
+const { storagePath, gcsPath, downloadURL } = await uploadPdfToStorage(file, setProgress);
+const dealId = await createDealDoc({ filename: file.name, storagePath, gcsPath, fileUrl: downloadURL });
 
 // If your Cloud Function is an HTTPS endpoint, keep this call:
 await requestAnalysis(dealId);
 
 const unsub = watchDeal(dealId, (d) => {
 setDeal(d);
-if (!d || d.status === "complete" || d.status === "error") {
+if (!d || d.status === "completed" || d.status === "error") {
 unsub(); setLoading(false);
 }
 });
@@ -79,12 +79,12 @@ ${isDragActive ? "border-indigo-400 bg-indigo-50" : "border-gray-300 bg-white"}`
 <div className="font-medium">{deal.filename}</div>
 </div>
 <span className={`rounded-full px-2 py-1 text-xs ${
-deal.status === "complete"
+deal.status === "completed"
 ? "bg-green-100 text-green-700"
 : deal.status === "error"
 ? "bg-red-100 text-red-700"
 : "bg-yellow-100 text-yellow-700"
-}`}>
+}`}> 
 {deal.status}
 </span>
 </div>
