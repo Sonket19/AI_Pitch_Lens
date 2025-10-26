@@ -27,6 +27,17 @@ from vertexai.generative_models import GenerativeModel
 __all__ = ["app", "process_deal_pdf", "generate_analysis"]
 
 
+def _index_payload() -> dict:
+    return {
+        "message": "Pitch Lens backend is running.",
+        "endpoints": ["/healthz", "/queueAnalysis"],
+    }
+
+
+def _health_payload() -> dict:
+    return {"status": "ok"}
+
+
 def _json_response(status: int, payload: dict) -> Tuple[int, bytes, list[tuple[bytes, bytes]]]:
     body = json.dumps(payload).encode("utf-8")
     headers = [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]
@@ -262,14 +273,11 @@ if FastAPI is not None:
     @app.get("/")
     def index() -> dict:
         """Provide a friendly landing response for local testing."""
-        return {
-            "message": "Pitch Lens backend is running.",
-            "endpoints": ["/healthz", "/queueAnalysis"],
-        }
+        return _index_payload()
 
     @app.get("/healthz")
     def health_check() -> dict:
-        return {"status": "ok"}
+        return _health_payload()
 
 
     @app.post("/queueAnalysis")
@@ -297,19 +305,13 @@ else:
             method = scope.get("method", "GET").upper()
 
             if path == "/" and method == "GET":
-                status, body, headers = _json_response(
-                    200,
-                    {
-                        "message": "Pitch Lens backend is running.",
-                        "endpoints": ["/healthz", "/queueAnalysis"],
-                    },
-                )
+                status, body, headers = _json_response(200, _index_payload())
                 await send({"type": "http.response.start", "status": status, "headers": headers})
                 await send({"type": "http.response.body", "body": body})
                 return
 
             if path == "/healthz" and method == "GET":
-                status, body, headers = _json_response(200, {"status": "ok"})
+                status, body, headers = _json_response(200, _health_payload())
                 await send({"type": "http.response.start", "status": status, "headers": headers})
                 await send({"type": "http.response.body", "body": body})
                 return
