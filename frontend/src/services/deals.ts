@@ -13,7 +13,7 @@ onProgress?: (pct: number) => void
 ): Promise<{ storagePath: string; downloadURL: string }> {
 return new Promise((resolve, reject) => {
 const uid = auth.currentUser?.uid ?? "anon";
-const storagePath = `decks/${uid}/${Date.now()}_${file.name}`;
+const storagePath = `deals/${uid}/${Date.now()}_${file.name}`;
 const storageRef = ref(storage, storagePath);
 const task = uploadBytesResumable(storageRef, file, { contentType: file.type || "application/pdf" });
 
