@@ -12,9 +12,9 @@ storage_client = storage.Client()
 db = firestore.Client()
 
 # These will be set as environment variables in the Cloud Function
-DOCAI_PROJECT_ID = "ai-pitch-lens-prod" # Your Project ID
+DOCAI_PROJECT_ID = "pitch-lens-ai" # Your Project ID
 DOCAI_LOCATION = "us" # Your DocAI processor location
-DOCAI_PROCESSOR_ID = "a1b2c3d4..." # Your DocAI processor ID
+DOCAI_PROCESSOR_ID = "c592e7609eabbf3" # Your DocAI processor ID
 
 PAGE_LIMIT = 15 # The hard quota
 
@@ -153,7 +153,7 @@ from vertexai.generative_models import GenerativeModel, Part
 
 # --- Initialize clients ---
 db = firestore.Client()
-model = GenerativeModel("gemini-1.5-flash-001") # Use a fast model
+model = GenerativeModel("gemini-2.5-flash-001") # Use a fast model
 
 #
 # --- This is our Firestore trigger function ---

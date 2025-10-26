@@ -1,29 +1,58 @@
 {
   "compilerOptions": {
+    /* ===== Core Compilation ===== */
     "target": "ES2022",
-    "experimentalDecorators": true,
-    "useDefineForClassFields": false,
     "module": "ESNext",
     "lib": [
       "ES2022",
       "DOM",
       "DOM.Iterable"
     ],
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "isolatedModules": true,
+    "noEmit": true,
     "skipLibCheck": true,
+    /* ===== Type Definitions ===== */
     "types": [
       "node"
     ],
-    "moduleResolution": "bundler",
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "allowJs": true,
-    "jsx": "react-jsx",
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    /* ===== Paths & Imports ===== */
+    "baseUrl": "./src",
     "paths": {
       "@/*": [
-        "./*"
+        "*"
       ]
     },
-    "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    /* ===== JS / Decorators ===== */
+    "allowJs": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    /* ===== Strictness ===== */
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "incremental": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  /* ===== Include / Exclude ===== */
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "dist"
+  ]
 }

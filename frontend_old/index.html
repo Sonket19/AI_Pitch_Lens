@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>PitchDeck AI</title>
+
+    <!-- ✅ Tailwind CSS (CDN) for instant styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- (Optional) Tailwind theme tweaks -->
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: "#eef2ff",
+                100: "#e0e7ff",
+                500: "#6366f1",
+                600: "#4f46e5",
+                700: "#4338ca",
+              },
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- Dialogflow Messenger (kept from your file) -->
+    <link
+      rel="stylesheet"
+      href="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/themes/df-messenger-default.css"
+    />
+    <script src="https://www.gstatic.com/dialogflow-console/fast/df-messenger/prod/v1/df-messenger.js"></script>
+
+    <style>
+      df-messenger {
+        z-index: 999;
+        position: fixed;
+        --df-messenger-font-color: #000;
+        --df-messenger-font-family: Google Sans, system-ui, -apple-system,
+          Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+        --df-messenger-chat-background: #f3f6fc;
+        --df-messenger-message-user-background: #d3e3fd;
+        --df-messenger-message-bot-background: #fff;
+        bottom: 16px;
+        right: 16px;
+      }
+      html,
+      body,
+      #root {
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body class="bg-gray-50 text-stone-800 antialiased">
+    <!-- Your React app mounts here -->
+    <div id="root"></div>
+
+    <!-- Dialogflow widget -->
+    <df-messenger
+      location="us-central1"
+      project-id="pitch-lens-ai"
+      agent-id="c2e7bfef-aedc-4b28-852d-e84678954a45"
+      language-code="en"
+      max-query-length="-1"
+    >
+      <df-messenger-chat-bubble chat-title="Business Analyst">
+      </df-messenger-chat-bubble>
+    </df-messenger>
+
+    <!-- Entry script (keep this path the same as your project uses) -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
