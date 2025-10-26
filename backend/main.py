@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+from functools import lru_cache
 from typing import Tuple
 
 import functions_framework
@@ -13,16 +14,33 @@ from pypdf import PdfReader, PdfWriter
 from urllib.parse import urlparse
 from vertexai.generative_models import GenerativeModel
 
-# --- Google Cloud clients ---
-storage_client = storage.Client()
-db = firestore.Client()
-model = GenerativeModel("gemini-2.5-flash-001")
+__all__ = ["app", "process_deal_pdf", "generate_analysis"]
+
 
 # --- Configuration ---
 DOCAI_PROJECT_ID = "pitch-lens-ai"
 DOCAI_LOCATION = "us"
 DOCAI_PROCESSOR_ID = "c592e7609eabbf3"
 PAGE_LIMIT = 15
+
+
+# ---------------------------------------------------------------------------
+# Lazy Google Cloud clients
+# ---------------------------------------------------------------------------
+@lru_cache(maxsize=1)
+def _get_storage_client() -> storage.Client:
+    return storage.Client()
+
+
+@lru_cache(maxsize=1)
+def _get_firestore_client() -> firestore.Client:
+    return firestore.Client()
+
+
+@lru_cache(maxsize=1)
+def _get_model() -> GenerativeModel:
+    return GenerativeModel("gemini-2.5-flash-001")
+
 
 
 # ---------------------------------------------------------------------------
@@ -51,12 +69,12 @@ def process_deal_pdf(cloud_event):
         if not full_text:
             raise ValueError("Text extraction failed, returned no text.")
 
-        doc_ref = db.collection("deals").document(deal_id)
+        doc_ref = _get_firestore_client().collection("deals").document(deal_id)
         doc_ref.update({"status": "text_extracted", "full_text": full_text})
         print(f"Successfully extracted text for {deal_id}.")
     except Exception as exc:  # pylint: disable=broad-except
         print(f"Error processing {deal_id}: {exc}")
-        doc_ref = db.collection("deals").document(deal_id)
+        doc_ref = _get_firestore_client().collection("deals").document(deal_id)
         doc_ref.update({"status": "error", "error_message": str(exc)})
 
 
@@ -85,6 +103,7 @@ def generate_analysis(cloud_event):
         return
 
     try:
+        model = _get_model()
         risk_prompt = (
             "Analyze the following pitch deck text and provide a risk assessment: "
             f"{full_text}"
@@ -97,7 +116,7 @@ def generate_analysis(cloud_event):
         )
         financials_response = model.generate_content(financials_prompt)
 
-        doc_ref = db.collection("deals").document(deal_id)
+        doc_ref = _get_firestore_client().collection("deals").document(deal_id)
         doc_ref.update(
             {
                 "status": "completed",
@@ -110,7 +129,7 @@ def generate_analysis(cloud_event):
         print(f"Successfully generated analysis for {deal_id}.")
     except Exception as exc:  # pylint: disable=broad-except
         print(f"Error analyzing {deal_id}: {exc}")
-        doc_ref = db.collection("deals").document(deal_id)
+        doc_ref = _get_firestore_client().collection("deals").document(deal_id)
         doc_ref.update(
             {
                 "status": "error",
@@ -188,19 +207,19 @@ def _parse_gcs_uri(gcs_uri: str) -> Tuple[str, str]:
 
 
 def _download_blob(bucket_name: str, blob_name: str) -> bytes:
-    bucket = storage_client.bucket(bucket_name)
+    bucket = _get_storage_client().bucket(bucket_name)
     blob = bucket.blob(blob_name)
     return blob.download_as_bytes()
 
 
 def _upload_blob(bucket_name: str, data: bytes, destination_blob_name: str) -> None:
-    bucket = storage_client.bucket(bucket_name)
+    bucket = _get_storage_client().bucket(bucket_name)
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_string(data, content_type="application/pdf")
 
 
 def _delete_blob(bucket_name: str, blob_name: str) -> None:
-    bucket = storage_client.bucket(bucket_name)
+    bucket = _get_storage_client().bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.delete()
 
@@ -224,7 +243,7 @@ def health_check() -> dict:
 def queue_analysis(payload: QueueRequest) -> dict:
     """Minimal local shim for the HTTPS function."""
     try:
-        doc_ref = db.collection("deals").document(payload.dealId)
+        doc_ref = _get_firestore_client().collection("deals").document(payload.dealId)
         if not doc_ref.get().exists:
             raise HTTPException(status_code=404, detail="Deal not found")
 
